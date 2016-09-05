@@ -94,7 +94,7 @@ head(combi[combi$Neighborhood=="IDOTRR",c("MSZoning","MSSubClass")],20)
 
 #Convert all chars to factors
 combi <- combi %>%
-          mutate_if(is.character,as.factor)
+  mutate_if(is.character,as.factor)
 
 #There are also some variables which are marked as int but are actually categorical. So we will
 #Convert those also to factors
@@ -206,7 +206,7 @@ impVars <- getSelectedAttributes(boruta_features)
 
 #First we will test on a subsample of the Train dataset
 
-   
+
 train_lm <- combi[combi$IsTrain==TRUE,][1:1100,] #FIrst 1100 rowsvof train
 test_lm <- combi[combi$IsTrain==TRUE,][1101:1460,] #Remaining rows of train
 
@@ -278,10 +278,6 @@ train_xgboost <- combi[combi$IsTrain==TRUE,]
 test_xgboost <- combi[combi$IsTrain==FALSE,]
 #fctVariables_train_lm <- colnames(train_lm[lapply(train_lm,class)=='factor']) #List of Factor variables
 
-train_xgboost$Id <- NULL
-
-test_xgboost_Id <- test_xgboost$Id
-test_xgboost$Id <- NULL
 
 test_xgboost$SalePrice <- NULL
 #test_lm$SalePrice <- NULL
@@ -292,6 +288,11 @@ test_xgboost$IsTrain <- NULL
 train_xgboost_sales <- train_xgboost$SalePrice
 train_xgboost$SalePrice <- NULL
 
+#Use Only Features evaluated as Accepted by Boruta
+#impVars
+train_xgboost <- train_xgboost[,impVars]
+test_xgboost <- test_xgboost[,impVars]
+
 train_xgBoost <- xgb.DMatrix(data.matrix (train_xgboost),label = train_xgboost_sales)
 xgmodel <- xgboost(data=train_xgBoost,nrounds=1000)
 xgmodel_predict <- predict(xgmodel,data.matrix(test_xgboost))
@@ -300,4 +301,4 @@ response_df <- data.frame(Id=test$Id,SalePrice=xgmodel_predict)
 summary(response_df)
 summary(response_df)
 str(response_df)
-write.csv(response_df,file="D:/amit/Data Science/Kaggle/House Prices/XGboost_allfeatures.csv",row.names=FALSE)
+write.csv(response_df,file="D:/amit/Data Science/Kaggle/House Prices/XGboost_Borutafeatures.csv",row.names=FALSE)
