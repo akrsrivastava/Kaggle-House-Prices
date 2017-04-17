@@ -1,0 +1,334 @@
+---
+title: "HousePrices : Exploratory Data Analysis"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 5
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning = FALSE)
+```
+
+### Introduction
+This document is an analysis of the Kaggle dataset at https://www.kaggle.com/c/house-prices-advanced-regression-techniques
+
+With 79 explanatory variables describing (almost) every aspect of residential homes in Ames, Iowa, this competition challenges data scientists/analysts to predict the final price of each home.
+
+This document is limited to the exploratory analysis of the data, visualizations and attempt to find interesting patterns. The actual machine learning/predictive efforts will be carried out in another document.
+
+```{r LoadLibraries,message=FALSE}
+rm(list = ls(all = TRUE))
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(tabplot)
+library(stringr)
+library(VIM)
+library(caret)
+library(ggmap)
+library(Boruta)
+options(scipen=999)
+```
+
+
+```{r Data Load,eval=FALSE}
+#Will Load files directly from the cleaned and save combi.rds
+train <- read.csv("train.csv", stringsAsFactors=FALSE)
+test <- read.csv("test.csv", stringsAsFactors=FALSE)
+```
+
+```{r CleanData,eval=FALSE}
+test$SalePrice=NA
+train$IsTrain=TRUE
+test$IsTrain=FALSE
+combi <- rbind(train,test)
+test_Id=test$Id
+
+
+str(train$Id)
+
+
+#Analysis of blanks and NAs
+#Check NAs
+sapply(combi,function(x){sum(ifelse(is.na(x),1,0))}) #This is faster than using colSums below
+#colSums(sapply(combi,is.na))
+#There are a lot of Variables where NA actually means something. See the data description. Lets analyze them first
+
+#Alley
+nrow(combi[is.na(combi$Alley),])
+#2721 NAs As per data dictionary NA means no alley/ So lets update NAs to No.
+combi$Alley <- ifelse(is.na(combi$Alley),"NO",combi$Alley)
+
+#BsmtQual
+nrow(combi[is.na(combi$BsmtQual),])
+#81 NA's
+combi$BsmtQual <- ifelse(is.na(combi$BsmtQual),"NO",combi$BsmtQual)
+
+#BsmtCond
+combi$BsmtCond <- ifelse(is.na(combi$BsmtCond),"NO",combi$BsmtCond)
+
+#BsmtExposure
+combi$BsmtExposure <- ifelse(is.na(combi$BsmtExposure),"NO",combi$BsmtExposure)
+
+#BsmtFinType1
+combi$BsmtFinType1 <- ifelse(is.na(combi$BsmtFinType1),"NO",combi$BsmtFinType1)
+
+#BsmtFinType2
+combi$BsmtFinType2 <- ifelse(is.na(combi$BsmtFinType2),"NO",combi$BsmtFinType2)
+
+#FireplaceQu
+combi$FireplaceQu <- ifelse(is.na(combi$FireplaceQu),"NO",combi$FireplaceQu)
+
+#GarageType
+combi$GarageType <- ifelse(is.na(combi$GarageType),"NO",combi$GarageType)
+
+#GarageFinish
+combi$GarageFinish <- ifelse(is.na(combi$GarageFinish),"NO",combi$GarageFinish)
+
+#GarageQual
+combi$GarageQual <- ifelse(is.na(combi$GarageQual),"NO",combi$GarageQual)
+
+#GarageCond
+combi$GarageCond <- ifelse(is.na(combi$GarageCond),"NO",combi$GarageCond)
+
+#PoolQC
+combi$PoolQC <- ifelse(is.na(combi$PoolQC),"NO",combi$PoolQC)
+
+#Fence
+combi$Fence <- ifelse(is.na(combi$Fence),"NO",combi$Fence)
+
+#MiscFeature
+combi$MiscFeature <- ifelse(is.na(combi$MiscFeature),"NO",combi$MiscFeature)
+
+#Done. Now check how many NAs left
+sapply(combi,function(x){sum(ifelse(is.na(x),1,0))})
+
+
+combi$Utilities= ordered(combi$Utilities,levels= c("ELO","NoSeWa","NoSewr","AllPub"))
+combi$ExterQual= ordered(combi$ExterQual,levels=c("Po","Fa","TA","Gd","Ex"))
+combi$ExterCond= ordered(combi$ExterCond,levels=c("Po","Fa","TA","Gd","Ex"))
+combi$BsmtQual= ordered(combi$BsmtQual,levels=c("NO","Po","Fa","TA","Gd","Ex"))
+combi$BsmtCond= ordered(combi$BsmtCond,levels=c("NO","Po","Fa","TA","Gd","Ex"))
+combi$BsmtExposure= ordered(combi$BsmtExposure,levels= c("NO", "No", "Mn","Av","Gd"))
+combi$BsmtFinType1= ordered(combi$BsmtFinType1,levels=c("NO", "Unf","LwQ","Rec","BLQ","ALQ","GLQ"))
+combi$BsmtFinType2= ordered(combi$BsmtFinType2,levels=c("NO", "Unf","LwQ","Rec","BLQ","ALQ","GLQ"))
+combi$HeatingQC= ordered(combi$HeatingQC,levels=c("Po","Fa","TA","Gd","Ex"))
+combi$KitchenQual= ordered(combi$KitchenQual,levels=c("Po","Fa","TA","Gd","Ex"))
+combi$FireplaceQu= ordered(combi$FireplaceQu,levels=c("Po","Fa","TA","Gd","Ex","NO"))
+combi$GarageFinish= ordered(combi$GarageFinish,levels=c("NO", "Unf","RFn","Fin"))
+combi$GarageQual= ordered(combi$GarageQual,levels=c("NO","Po","Fa","TA","Gd","Ex"))
+combi$GarageCond= ordered(combi$GarageCond,levels=c("NO","Po","Fa","TA","Gd","Ex"))
+combi$PoolQC= ordered(combi$PoolQC,levels=c("NO","Fa","TA","Gd","Ex"))
+combi$Fence= ordered(combi$Fence,levels=c("NO","MnWw","GdWo","MnPrv","GdPrv"))
+
+str(combi)
+summary(combi)
+
+
+#FOr chars I will analyze if there is some sort of ordering. If yes then will convert them
+#to ordered factor, else they will be converted directly to factors. I will check the data dictionary
+#and will choose those chars which can be ordered.
+
+
+combi$LotShape <- factor(combi$LotShape,levels=c("IR1","IR2","IR3","Reg"),ordered=TRUE)
+combi$CentralAir <- ordered(combi$CentralAir,levels=c("N","Y"))
+combi$PavedDrive <- ordered(combi$PavedDrive, levels=c("N","P","Y"))
+
+#Convert all other chars to factors
+combi <- combi %>%
+  mutate_if(is.character,as.factor)
+
+#There are also some variables which are marked as int but are actually categorical. So we will
+#Convert those also to factors
+combi$MSSubClass <- as.factor(combi$MSSubClass)
+
+#Age of property
+#Age of property will be a better indicator than year built and year sold #Assuming month of year built is 1
+combi$AgeBuilt <- (combi$YrSold-combi$YearBuilt)*12 +combi$MoSold
+
+
+#Change other years into age
+combi$AgeRemodAdd <- (combi$YrSold-combi$YearRemodAdd)*12
+combi$AgeGarageBlt <- (combi$YrSold-combi$GarageYrBlt)*12
+
+#Drop the YrSold,YearBuilt,"YearRemodAdd","GarageYrBlt" and MoSold variables
+#combi[,c("YrSold","YearBuilt","MoSold","YearRemodAdd","GarageYrBlt")] <- NULL
+#Drop ID
+combi$Id <- NULL
+
+
+#KNN Imputation
+# Right now, I will do a quick kNN imputation to set a benchmark
+combi_kNN <- select(combi,-c(SalePrice,IsTrain))
+#combi_kNN <- combi[,!colnames(combi) %in% c("SalePrice","IsTrain")] #Removed these three columns
+
+combi_knn_imputed <- kNN(data=combi_kNN,k=54) #Not giving variable names,so it will impute NAs in all vars. k=sqrt(2919)
+
+sapply(combi_knn_imputed,function(x){sum(ifelse(is.na(x),1,0))})
+#All NAs have been removed
+
+str(combi_knn_imputed)
+#Additional variables have been created. We can remove those
+
+
+combi_knn_imputed <- subset(combi_knn_imputed,select = MSSubClass:AgeGarageBlt )
+str(combi_knn_imputed)
+
+combi <- data.frame(combi_knn_imputed,combi[,c("SalePrice","IsTrain")]) 
+
+#Now check for any blanks
+sapply(combi,function(x){sum(ifelse(str_trim(x)=="",1,0))}) #Check no. of blanks in the features
+#No blanks. Everything fine.
+
+tableplot(combi[combi$IsTrain==TRUE,],sortCol = SalePrice,nBins = 10,select=c(SalePrice,2:5),nCols = 2)
+
+summary(combi$LotArea)
+summary(combi)
+
+#Save clean data
+saveRDS(combi, "combi.rds")
+train_cleaned <- write.csv(x=combi[combi$IsTrain==TRUE,],file = "train_cleaned.csv",row.names = FALSE)
+test_cleaned <- write.csv(x=combi[combi$IsTrain==FALSE,],file = "test_cleaned.csv",row.names = FALSE)
+```
+
+
+Load Data from cleaned CSVs
+```{r LoadCleanedData}
+combi <- readRDS("combi.rds")
+```
+
+Now for some EDA
+```{r}
+#Now for some analysis and vizualization
+train_data <- combi[combi$IsTrain==TRUE,]
+test_data <- combi[combi$IsTrain==FALSE,]
+```
+
+Checking the characterstic of Sale Price
+```{r EDA}
+summary(train_data$SalePrice)
+ggplot(train_data,aes(SalePrice)) +
+  geom_density(col="orange")
+boxplot.stats(train_data$SalePrice)
+```
+
+About 61 SalesPrices are outlier.Excluding the outliers, the distribution of SalesPrice is roughly Normal.
+
+```{r CompleteTablePlot}
+tableplot(dat = train_data,sortCol = SalePrice,nCols = 7)
+```
+
+The plots above show the relationship between Sale Price and the other features. Lets quickly check out some important relationships
+
+1.  There does not seem to be a relationship between Sale Price and Lot Area or Lot Frontage
+2.  There seems to be a strong positive corelation between Sale Price and Overall Quality
+3.  Newly built/remodelled htouses have higher Sale Prices.
+4.  It pays to have a Good/EXcellent Exterior and basement Quality.
+5.  Poured concrete foundation houses have higher prices.
+6.  Houses having larger basements command higher sales price.
+7.  Not surprisingly, actual area of the house (ground floor area, 1st floor area) is related to the Sales Price. As noted above, the Lot area is not a strong indicator of the price.
+8.  Bigger garages command higher prices.
+9.  Also interesting to note is that Prices of houses being sold under abnormal conditions(such as foreclosures) are typically lower.
+
+
+   
+No. of houses sold as a function of Year Built  
+  
+```{r}
+ggplot(train_data,aes(x=YearBuilt)) +
+  geom_bar(fill="orange") +
+  labs(x="Year",
+       y="No. of houses sold",
+       title="No. of Houses Sold vs Year Built")
+```
+
+   
+Avearge Sale Price over the years
+  
+```{r}
+ggplot(train_data) +
+  geom_histogram(aes(x=YrSold,y=SalePrice),stat="summary",fun.y=mean,fill="tomato1",labels=TRUE)
+```
+
+
+The Average Sales price have more or less remain stagnant over the past few years
+
+  
+  
+Some key characterstict of High Sale Price houses.
+  
+Neighbourhoods with higher Sale Prices
+```{r HighPrices}
+
+neighborhood_df <- train_data[order(desc(train_data$SalePrice)),]
+#neighborhood_df$Neighborhood <- fct_inorder(neighborhood_df$Neighborhood,ordered = TRUE)
+ggplot(neighborhood_df) +
+  geom_bar(aes(x=Neighborhood,y=SalePrice,fill=MSZoning),stat="summary",fun.y=median) + 
+  geom_hline(aes(yintercept=median(SalePrice)),col="red") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Neighborhood",
+       y="Median Sales Price",
+       title="Sales Price across Neighborhoods")
+  
+rm(neighborhood_df)
+```
+  
+1.  High cost houses are typically from these neighbourhoods:
+    a)  Crawford
+    b)  Northridge Heights
+    c)  Somerset
+The red line is the median Sales Price
+
+```{r AverageGrowthRate}
+avggrowth_df <- train_data %>%
+                group_by(Neighborhood,YrSold) %>%
+                select(Neighborhood,YrSold,SalePrice) %>%
+                summarize(avg_annual_price=mean(SalePrice))
+
+ggplot(avggrowth_df,aes(x=YrSold,y=avg_annual_price)) +
+         geom_line(aes(col=Neighborhood))
+
+high_low_growth_df <- avggrowth_df %>%
+                   group_by(Neighborhood) %>%
+                    summarize(avg_price=mean(avg_annual_price)) %>%
+                    select(Neighborhood,avg_price) %>%
+                    arrange(desc(avg_price)) 
+
+high_low_growth_df <- rbind(head(high_low_growth_df,5),tail(high_low_growth_df,5))
+
+ggplot(avggrowth_df[avggrowth_df$Neighborhood %in% high_low_growth_df$Neighborhood,]) + 
+      geom_line(aes(x=YrSold,y=avg_annual_price,col=Neighborhood)) +
+  labs(x="Year of Sale",
+       y="Avearge Sale Price",
+       title= "Average Sale Price of five highest and lowest priced neighborhoods")
+rm(avggrowth_df)    
+rm(high_low_growth_df)
+```
+
+
+```{r}
+table(train_data$SaleCondition)
+ggplot(train_data) +
+  geom_bar(aes(x=YrSold,fill=SaleCondition),position="fill") +
+  labs(x="Year Sold",
+      y="Proportion",
+      title="Sale Condition as proportion of total Sales")
+
+t.test(train_data[train_data$YrSold==2007 & train_data$SaleCondition=="Abnorml","SalePrice"],train_data[train_data$YrSold==2008 & train_data$SaleCondition=="Abnorml","SalePrice"])
+```
+
+The proportion of Normal sale as a fraction of total sale has been increasing. I dont think there is data for enough years to conclude from this chart whether the proportion of Abnormal sales increased due to the Financial crisis. The t test for the avearge Sale Price of "Abnormal" sales in 2007, 2008 indicate that there is no price difference between the two years.
+
+
+Boruta Feature Importance
+
+```{r Boruta,eval=F}
+Sys.time()
+  boruta_features <-  Boruta(data=train_data,SalePrice~.,doTrace=2)
+Sys.time()
+boruta_features$finalDecision
+
+```
+
